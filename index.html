@@ -1,4 +1,309 @@
 
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dino Dash: Dino World</title>
+<style>
+:root{--ink:#183047;--green:#35b96b;--gold:#ffd34e;--deep:#123047}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;background:radial-gradient(circle at 15% 10%,#fff 0 3%,transparent 18%),linear-gradient(160deg,#72d7ff,#e8fbff 55%,#a8e8a9);font-family:system-ui,Arial,sans-serif;color:var(--ink);display:flex;justify-content:center;align-items:center;padding:14px}
+#app{width:min(100%,1000px);background:#fff;border:4px solid #24435a;border-radius:22px;box-shadow:0 12px 0 #24435a;padding:18px}
+header{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+h1{margin:0;font-size:clamp(26px,5vw,42px);color:#1c6d49;text-shadow:2px 2px #b6f0c8}
+.stats{font-weight:800;background:#eaf8ed;border-radius:12px;padding:9px 13px}
+.screen{display:none;text-align:center;padding:12px 4px}.screen.active{display:block}
+button{border:0;border-radius:12px;padding:12px 18px;margin:5px;background:#2eae64;color:white;font-weight:850;font-size:16px;cursor:pointer;box-shadow:0 4px 0 #167044}
+button:active{transform:translateY(3px);box-shadow:0 1px 0 #167044}
+button.alt{background:#347ca8;box-shadow:0 4px 0 #20506e}
+button.gold{background:#e9a91c;box-shadow:0 4px 0 #986b0c;color:#263547}
+button:disabled{opacity:.45;cursor:not-allowed}
+#gameWrap{position:relative;margin:12px auto 8px;max-width:1100px;overflow:hidden;border-radius:18px;box-shadow:0 10px 24px #173b5030;background:#9de7ff}
+canvas{display:block;width:100%;height:auto;touch-action:none;border:4px solid #24435a;border-radius:14px;background:#a6e8ff}
+#hud{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;font-weight:850;margin:8px auto;max-width:900px}
+#overlay{position:absolute;inset:4px;border-radius:10px;background:#183047cc;color:white;display:none;align-items:center;justify-content:center;flex-direction:column;padding:15px;text-align:center}
+#overlay.show{display:flex}
+#overlay h2{font-size:clamp(26px,5vw,42px);margin:4px}
+.small{font-size:14px;opacity:.85}
+canvas:fullscreen,canvas:-webkit-full-screen{display:block;background:#a6e8ff;width:100vw;height:100vh;max-width:100vw;max-height:100vh;aspect-ratio:900/390;object-fit:contain;border:0;border-radius:0;margin:0}
+.cards{display:flex;justify-content:center;gap:10px;flex-wrap:wrap;margin:15px 0}
+.card{border:2px solid #c7e4d1;border-radius:14px;padding:12px;min-width:135px;background:#f5fff7}
+.card.selected{border:3px solid #24a65b;background:#e4ffeb}
+.card .dino{font-size:38px}
+#toast{min-height:25px;font-weight:800;color:#b45c00}
+@media(max-width:560px){#app{padding:10px}button{font-size:14px;padding:10px 12px}.stats{font-size:14px}}
+</style>
+</head>
+<body>
+<div id="app">
+<header><h1>🦖 DINO DASH</h1><div class="stats">🪙 <span id="coins">0</span> coins &nbsp; | &nbsp; 🏆 Best: <span id="best">0</span></div></header>
+
+<section id="login" class="screen">
+<h2>🔒 Enter Dino Dash</h2>
+<p>Type the password to unlock the game.</p>
+<input id="passwordInput" type="password" placeholder="Enter password" autocomplete="off" style="font-size:18px;padding:12px;border:2px solid #9bcdb0;border-radius:10px;width:min(90%,320px);text-align:center" onkeydown="if(event.key==='Enter')unlockGame()">
+<p><label style="font-weight:700"><input id="showPassword" type="checkbox" onchange="togglePasswordVisibility()"> Show password</label></p>
+<button onclick="unlockGame()">UNLOCK GAME</button>
+<p id="loginMessage" style="color:#b3261e;font-weight:800;min-height:24px"></p>
+</section>
+
+<section id="home" class="screen">
+<h2>Welcome to Dino World!</h2><p>Run, jump, duck, collect coins, and explore new biomes.</p>
+<div style="font-size:76px">🦖 🌋 🌴</div>
+<button onclick="startGame()">▶ PLAY</button><button class="alt" onclick="showScreen('shop')">🛒 DINO SHOP</button><button class="gold" onclick="showScreen('upgrades')">⬆ UPGRADES</button>
+<p class="small">Keyboard: Space / ↑ to jump · ↓ to duck · Esc to pause or exit fullscreen</p>
+</section>
+
+<section id="shop" class="screen"><h2>Dinosaur Shop</h2><p>Choose your runner. Buying a dinosaur also selects it.</p><div id="shopCards" class="cards"></div><button class="alt" onclick="showScreen('home')">BACK</button></section>
+<section id="upgrades" class="screen"><h2>Upgrades</h2><div id="upgradeCards" class="cards"></div><button class="alt" onclick="showScreen('home')">BACK</button></section>
+
+<section id="game" class="screen">
+<div id="hud"><span id="levelLabel">Level 1 · Green Valley</span><span>❤️ <b id="lives">3</b></span><span>🪙 <b id="runCoins">0</b></span><span>Score: <b id="score">0</b></span></div>
+<div id="gameWrap"><canvas id="c" width="900" height="390"></canvas><div id="overlay"><h2 id="overlayTitle">PAUSED</h2><p id="overlayText"></p><div><button onclick="resumeGame()">RESUME</button><button class="alt" onclick="quitGame()">HOME</button></div></div></div>
+<div><button onclick="jump()">⬆ JUMP</button><button class="alt" onpointerdown="duckStart()" onpointerup="duckEnd()" onpointerleave="duckEnd()">⬇ DUCK</button><button class="gold" onclick="toggleFullscreen()">⛶ FULL SCREEN</button><button class="alt" onclick="pauseGame()">Ⅱ PAUSE</button></div>
+<div id="toast"></div><p class="small">On phones/tablets: tap to jump and swipe down to duck.</p>
+</section>
+</div>
+
+<script>
+const $=id=>document.getElementById(id);
+const dinos=[
+{name:"Classic",emoji:"🦖",cost:0,color:"#39a95d",spike:"#f4d35e"},
+{name:"Raptor",emoji:"🦕",cost:35,color:"#2d9d73",spike:"#b9f36b"},
+{name:"Fire Dino",emoji:"🐲",cost:80,color:"#e66b35",spike:"#ffd34e"},
+{name:"Triceratops",emoji:"🦏",cost:130,color:"#5c9c43",spike:"#e9e3c1"},
+{name:"Golden Dino",emoji:"🌟🦖",cost:220,color:"#f0b82e",spike:"#fff0a0"},
+{name:"Ice Dino",emoji:"❄️🦖",cost:300,color:"#55bde8",spike:"#e8fbff"},
+{name:"Shadow Raptor",emoji:"🌑🦖",cost:450,color:"#65528f",spike:"#c5a8ff"},
+{name:"Crystal Dino",emoji:"💎🦖",cost:650,color:"#39bdb5",spike:"#d4ffff"},
+{name:"Galaxy Dino",emoji:"🌌🦖",cost:900,color:"#4657a8",spike:"#ffb8ed"}
+];
+const biomes=["Green Valley","Desert Dunes","Snowy Peaks","Volcano Island","Candy Canyon","Jungle Ruins","Ocean Coast","Crystal Caves","Moon Base","Dino City"];
+let data=JSON.parse(localStorage.getItem("dinoDashPlaytest")||"null")||{coins:0,best:0,owned:[0],selected:0,speed:0,jump:0,magnet:0,shield:0};
+data.magnet=data.magnet||0;data.shield=data.shield||0;
+let level=1,lives=3,score=0,runCoins=0,objects=[],running=false,paused=false,raf=0,last=0,spawnClock=0,nextSpawn=75,warning=0,ducking=false,invuln=0,levelClock=0,levelPause=0,worldOffset=0,ambushRemaining=0,ambushTimer=0,ambushActive=false;
+let ambushWarningShown=false,ambushRewarded=false;
+const canvas=$("c"),ctx=canvas.getContext("2d");
+let player={x:110,y:292,vy:0,onGround:true};
+let pointerStart=null,duckTimeout=null,jumpBuffer=0;
+
+function save(){localStorage.setItem("dinoDashPlaytest",JSON.stringify(data));updateStats()}
+function updateStats(){$("coins").textContent=data.coins;$("best").textContent=data.best}
+function showScreen(id){
+["login","home","shop","upgrades","game"].forEach(s=>$(s).classList.toggle("active",s===id));
+if(id==="shop")renderShop();
+if(id==="upgrades")renderUpgrades()
+}
+function togglePasswordVisibility(){$("passwordInput").type=$("showPassword").checked?"text":"password"}
+function unlockGame(){
+const entered=$("passwordInput").value;
+if(entered==="k14wj4sg4"){$("loginMessage").textContent="";$("passwordInput").value="";showScreen("home")}
+else{$("loginMessage").textContent="Incorrect password. Try again!";$("passwordInput").value="";$("passwordInput").focus()}
+}
+function renderShop(){
+$("shopCards").innerHTML=dinos.map((d,i)=>`<div class="card ${data.selected===i?"selected":""}"><div class="dino">${d.emoji}</div><b>${d.name}</b><p>${d.cost?d.cost+" coins":"FREE"}</p><button onclick="buyDino(${i})">${data.owned.includes(i)?(data.selected===i?"SELECTED":"SELECT"):"BUY"}</button></div>`).join("")
+}
+function buyDino(i){
+let d=dinos[i];
+if(data.owned.includes(i))data.selected=i;
+else if(data.coins>=d.cost){data.coins-=d.cost;data.owned.push(i);data.selected=i}
+else{$("toast").textContent="Not enough coins yet!";return}
+save();renderShop()
+}
+function renderUpgrades(){
+$("upgradeCards").innerHTML=[
+{key:"speed",name:"Speed Boost",desc:"Move faster and earn points faster",cost:50},
+{key:"jump",name:"Jump Control",desc:"A slightly higher jump for easier cactus clears",cost:60},
+{key:"magnet",name:"Coin Magnet",desc:"Collect coins from farther away",cost:75},
+{key:"shield",name:"Extra Heart",desc:"Start each run with one extra life per upgrade",cost:100}
+].map(u=>`<div class="card"><h3>${u.name}</h3><p>${u.desc}</p><p>Upgrade level ${data[u.key]} · ${u.cost*(data[u.key]+1)} coins</p><button onclick="buyUpgrade('${u.key}',${u.cost})">UPGRADE</button></div>`).join("")
+}
+function buyUpgrade(k,c){
+let price=c*(data[k]+1);
+if(data.coins<price){alert("Not enough coins yet!");return}
+data.coins-=price;data[k]++;save();renderUpgrades()
+}
+function startGame(){
+level=1;lives=3+Math.min(data.shield,3);score=0;runCoins=0;objects=[];
+player={x:110,y:292,vy:0,onGround:true};
+spawnClock=0;nextSpawn=65;warning=0;ducking=false;invuln=0;
+levelClock=0;levelPause=0;worldOffset=0;
+ambushRemaining=0;ambushTimer=0;ambushActive=false;ambushWarningShown=false;ambushRewarded=false;
+paused=false;running=true;$("toast").textContent="";
+showScreen("game");$("overlay").classList.remove("show");
+updateHUD();last=performance.now();cancelAnimationFrame(raf);raf=requestAnimationFrame(loop)
+}
+function updateHUD(){
+$("levelLabel").textContent=`Level ${level} / 10000 · ${biomes[(level-1)%biomes.length]}`;
+$("lives").textContent=lives;$("runCoins").textContent=runCoins;$("score").textContent=Math.floor(score)
+}
+function jump(){
+if(!running||paused||levelPause>0)return;
+jumpBuffer=0.18;
+if(player.onGround||player.y>=290){player.y=292;player.vy=-(675+data.jump*18);player.onGround=false;ducking=false;jumpBuffer=0}
+}
+function duckStart(){ducking=true}
+function duckEnd(){ducking=false}
+function pauseGame(){
+if(!running)return;
+paused=true;$("overlayTitle").textContent="PAUSED";$("overlayText").textContent="Take a breather!";$("overlay").classList.add("show")
+}
+function resumeGame(){
+if(!running)return;
+paused=false;$("overlay").classList.remove("show");last=performance.now();raf=requestAnimationFrame(loop)
+}
+function quitGame(){running=false;cancelAnimationFrame(raf);$("overlay").classList.remove("show");showScreen("home");save()}
+
+function toggleFullscreen(){
+const c=$("c");
+if(document.fullscreenElement||document.webkitFullscreenElement){
+const exit=document.exitFullscreen||document.webkitExitFullscreen;
+if(exit)exit.call(document);
+return;
+}
+const enter=c.requestFullscreen||c.webkitRequestFullscreen;
+if(!enter){$("toast").textContent="Fullscreen isn't supported by this browser.";return}
+try{
+const result=enter.call(c);
+if(result&&typeof result.catch==="function")result.catch(err=>{
+$("toast").textContent="Fullscreen blocked ("+err.name+"). Try opening this HTML file directly in Chrome.";
+});
+}catch(err){$("toast").textContent="Fullscreen blocked ("+err.name+"). Try opening this HTML file directly in Chrome."}
+}
+function syncFullscreenButton(){
+const active=!!(document.fullscreenElement||document.webkitFullscreenElement);
+const b=[...document.querySelectorAll("#game button")].find(x=>x.textContent.includes("FULL SCREEN")||x.textContent.includes("EXIT FULL"));
+if(b)b.textContent=active?"⛶ EXIT FULL SCREEN":"⛶ FULL SCREEN"
+}
+document.addEventListener("fullscreenchange",syncFullscreenButton);
+document.addEventListener("webkitfullscreenchange",syncFullscreenButton);
+document.addEventListener("keydown",e=>{
+if(e.code==="Escape"){
+if(document.fullscreenElement||document.webkitFullscreenElement){(document.exitFullscreen||document.webkitExitFullscreen).call(document)}
+else if(running){if(paused)resumeGame();else pauseGame()}
+return
+}
+if(e.code==="Space"||e.code==="ArrowUp"){e.preventDefault();jump()}
+if(e.code==="ArrowDown")duckStart()
+});
+document.addEventListener("keyup",e=>{if(e.code==="ArrowDown")duckEnd()});
+canvas.style.touchAction="none";$("gameWrap").style.touchAction="none";
+$("gameWrap").addEventListener("pointerdown",e=>{if(!running||paused)return;pointerStart={x:e.clientX,y:e.clientY}});
+$("gameWrap").addEventListener("pointerup",e=>{
+if(!pointerStart)return;
+const dy=e.clientY-pointerStart.y;pointerStart=null;
+if(dy< -18)jump();
+else if(dy>18){duckStart();clearTimeout(duckTimeout);duckTimeout=setTimeout(duckEnd,1000)}
+else jump()
+});
+$("gameWrap").addEventListener("pointercancel",()=>{pointerStart=null;duckEnd()});
+function addObject(type,x=930,y=300){
+objects.push({type,x,y,passed:false,phase:Math.random()*6.28,size:type==="cactus"?(0.8+Math.random()*.45):1,speedMultiplier:type==="ptero"?.68:1})
+}
+function spawn(){
+let r=Math.random();
+if(level>=3&&r<.10){warning=2;$("toast").textContent="⚠️ WATCH OUT! PTERODACTYL INCOMING!";return}
+if(r<.43){let y=205+Math.random()*65,count=2+Math.floor(Math.random()*3);for(let i=0;i<count;i++)addObject("coin",930+i*36,y+(i%2)*-12)}
+else{let kind=Math.random()<.22?"rock":"cactus";addObject(kind,930,kind==="rock"?314:300)}
+}
+function hit(){if(invuln>0)return;lives--;invuln=1.3;updateHUD();if(lives<=0)endGame()}
+function endGame(){
+running=false;cancelAnimationFrame(raf);data.coins+=runCoins;data.best=Math.max(data.best,Math.floor(score));save();
+$("overlayTitle").textContent="GAME OVER";
+$("overlayText").textContent=`You reached Level ${level}, scored ${Math.floor(score)}, and collected ${runCoins} coins!`;
+$("overlay").querySelector("div").innerHTML='<button onclick="startGame()">PLAY AGAIN</button><button class="alt" onclick="quitGame()">HOME</button>';
+$("overlay").classList.add("show")
+}
+function nextLevel(){
+if(level>=10000){winGame();return}
+level++;levelClock=0;objects=[];levelPause=3;ambushWarningShown=false;
+if(level%5===0){ambushRemaining=15;ambushTimer=1.4;ambushActive=true;ambushRewarded=false;spawnClock=0;$("toast").textContent="🚨 AMBUSH! 15 PTERODACTYLS INCOMING! GET READY TO DODGE!"}
+else $("toast").textContent=`🎉 LEVEL ${level}! ${biomes[(level-1)%biomes.length]}`;
+updateHUD()
+}
+function winGame(){
+running=false;cancelAnimationFrame(raf);data.coins+=runCoins;data.best=Math.max(data.best,Math.floor(score));save();
+$("overlayTitle").textContent="🏆 YOU BEAT ALL 10,000 LEVELS!";
+$("overlayText").textContent=`Amazing! You completed every level and collected ${runCoins} coins.`;
+$("overlay").querySelector("div").innerHTML='<button onclick="startGame()">PLAY AGAIN</button><button class="alt" onclick="quitGame()">HOME</button>';
+$("overlay").classList.add("show")
+}
+function loop(now){
+if(!running||paused)return;
+let dt=Math.min((now-last)/1000,.035);last=now;
+if(levelPause>0){levelPause-=dt;if(levelPause<=0)$("toast").textContent="";draw();raf=requestAnimationFrame(loop);return}
+score+=dt*12;levelClock+=dt;worldOffset+=dt*(170+level*8+data.speed*18);spawnClock+=dt*60;if(invuln>0)invuln-=dt;
+if(level%5===4&&levelClock>=20&&!ambushWarningShown){ambushWarningShown=true;$("toast").textContent="warning! the ambush is coming survive for a hundred coins"}
+if(ambushActive&&ambushRemaining>0){ambushTimer-=dt;if(ambushTimer<=0){addObject("ptero",930,Math.random()<.5?205:250);ambushRemaining--;ambushTimer=1.15}}
+if(warning>0){warning-=dt;if(warning<=0){addObject("ptero",930,Math.random()<.5?210:255);$("toast").textContent="🦅 Duck under the pterodactyl!"}}
+if(!ambushActive&&spawnClock>=nextSpawn){spawn();spawnClock=0;nextSpawn=52+Math.random()*55-Math.min(level*1.2,16)}
+if(jumpBuffer>0)jumpBuffer-=dt;
+player.vy+=1900*dt;player.y+=player.vy*dt;
+if(player.y>=292){player.y=292;player.vy=0;player.onGround=true;if(jumpBuffer>0){player.vy=-(675+data.jump*18);player.onGround=false;jumpBuffer=0;ducking=false}}
+else player.onGround=false;
+let speed=(290+level*15+data.speed*18)*dt;
+for(let o of objects){
+o.x-=speed*(o.speedMultiplier||1);
+if(o.type==="coin"&&Math.abs(o.x-player.x)<(29+data.magnet*18)&&Math.abs(o.y-(player.y+22))<(38+data.magnet*8)){o.type="gone";runCoins+=level;updateHUD()}
+if(o.type==="cactus"||o.type==="rock"){if(o.x<player.x+42&&o.x>player.x-28&&player.y>245&&!ducking)hit()}
+if(o.type==="ptero"){if(o.x<player.x+46&&o.x>player.x-38&&!ducking&&player.y>235)hit()}
+}
+objects=objects.filter(o=>o.x>-80&&o.type!=="gone");
+if(ambushActive&&ambushRemaining===0&&!objects.some(o=>o.type==="ptero")){
+ambushActive=false;
+if(!ambushRewarded){runCoins+=100;ambushRewarded=true;updateHUD();$("toast").textContent="🏆 AMBUSH SURVIVED! +100 BONUS COINS!"}
+spawnClock=0
+}
+if(levelClock>=26&&!ambushActive)nextLevel();
+updateHUD();draw();if(running)raf=requestAnimationFrame(loop)
+}
+function drawDinosaur(){
+const t=performance.now()/1000,airborne=player.y<291,jumpAmount=Math.max(0,292-player.y),baseY=player.y+34,heightOffGround=Math.max(0,292-player.y);
+const style=dinos[data.selected]||dinos[0],body=style.color,accent=style.spike,stride=airborne?Math.sin(t*13)*5:Math.sin(t*17)*10;
+ctx.save();ctx.globalAlpha=Math.max(.10,1-heightOffGround/240);ctx.fillStyle="#173e32";ctx.beginPath();ctx.ellipse(player.x,337,Math.max(10,29-heightOffGround*.08),5,0,0,Math.PI*2);ctx.fill();ctx.restore();
+ctx.save();ctx.translate(player.x,ducking?baseY+8:baseY);
+if(ducking){ctx.scale(1.12,.62);ctx.translate(0,22)}else if(airborne)ctx.rotate(-Math.min(.2,jumpAmount/700));
+ctx.scale(1,airborne?1.04:1+Math.sin(t*18)*.018);
+ctx.fillStyle=body;ctx.beginPath();ctx.moveTo(-20,-24);ctx.quadraticCurveTo(-44,-39,-65,-31);ctx.quadraticCurveTo(-50,-17,-37,-10);ctx.closePath();ctx.fill();ctx.strokeStyle="#173f37";ctx.lineWidth=2;ctx.stroke();
+ctx.beginPath();ctx.ellipse(-2,-21,34,24,-.08,0,Math.PI*2);ctx.fill();
+ctx.fillStyle="#d9efb0";ctx.beginPath();ctx.ellipse(5,-10,22,10,.05,0,Math.PI*2);ctx.fill();
+ctx.fillStyle=body;ctx.beginPath();ctx.roundRect(12,-55,22,39,10);ctx.fill();ctx.beginPath();ctx.arc(29,-57,19,0,Math.PI*2);ctx.fill();ctx.beginPath();ctx.ellipse(43,-48,17,10,-.08,0,Math.PI*2);ctx.fill();
+ctx.strokeStyle="#24533a";ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(31,-40);ctx.quadraticCurveTo(42,-36,54,-43);ctx.stroke();ctx.fillStyle="#183047";ctx.beginPath();ctx.arc(51,-51,2,0,Math.PI*2);ctx.fill();
+ctx.fillStyle="#fff";ctx.beginPath();ctx.ellipse(34,-63,7,8,0,0,Math.PI*2);ctx.fill();ctx.fillStyle="#172b3a";ctx.beginPath();ctx.arc(36,-62,3.5,0,Math.PI*2);ctx.fill();ctx.fillStyle="#fff";ctx.beginPath();ctx.arc(37,-64,1.2,0,Math.PI*2);ctx.fill();
+ctx.strokeStyle="#244b36";ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(27,-72);ctx.lineTo(39,-73);ctx.stroke();
+ctx.fillStyle=accent;for(let i=0;i<5;i++){const x=-25+i*12;ctx.beginPath();ctx.moveTo(x,-39);ctx.quadraticCurveTo(x+3,-54,x+10,-48);ctx.lineTo(x+12,-36);ctx.closePath();ctx.fill()}
+ctx.strokeStyle="#246446";ctx.lineWidth=6;ctx.lineCap="round";ctx.beginPath();ctx.moveTo(16,-22);ctx.quadraticCurveTo(23,-15,27,-20);ctx.stroke();
+ctx.strokeStyle="#245d3b";ctx.lineWidth=8;ctx.lineCap="round";ctx.beginPath();ctx.moveTo(-13,-5);ctx.lineTo(-16+stride,5);ctx.lineTo(-27+stride,5);ctx.stroke();ctx.beginPath();ctx.moveTo(9,-5);ctx.lineTo(13-stride,5);ctx.lineTo(23-stride,5);ctx.stroke();
+ctx.strokeStyle="#b4e58a";ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(-27+stride,5);ctx.lineTo(-22+stride,5);ctx.moveTo(23-stride,5);ctx.lineTo(28-stride,5);ctx.stroke();ctx.restore()
+}
+function draw(){
+let w=900,h=390;ctx.clearRect(0,0,w,h);
+let sky=["#a5e8ff","#ffdca0","#c9e8ff","#ffb18d","#ffe4a8","#a9e8c2","#9de4f2","#d8c9ff","#172b55","#ffc9a4"][(level-1)%10];
+let skyGrad=ctx.createLinearGradient(0,0,0,h);skyGrad.addColorStop(0,sky);skyGrad.addColorStop(.72,"#e5f8df");skyGrad.addColorStop(1,"#b4e6a1");ctx.fillStyle=skyGrad;ctx.fillRect(0,0,w,h);
+ctx.save();ctx.globalAlpha=.72;ctx.fillStyle="#fff7c2";ctx.beginPath();ctx.arc(760,82,35,0,Math.PI*2);ctx.fill();ctx.globalAlpha=.18;ctx.beginPath();ctx.arc(760,82,58,0,Math.PI*2);ctx.fill();ctx.restore();
+ctx.fillStyle="#ffffff99";
+for(let i=0;i<5;i++){let x=((i*210-worldOffset*.18)%1100+1100)%1100-100;ctx.beginPath();ctx.arc(x,75+(i%2)*35,25,0,Math.PI*2);ctx.arc(x+28,80+(i%2)*35,31,0,Math.PI*2);ctx.arc(x+58,75+(i%2)*35,22,0,Math.PI*2);ctx.fill()}
+ctx.fillStyle="#8bb9a0";ctx.beginPath();ctx.moveTo(0,252);for(let x=0;x<=900;x+=45)ctx.lineTo(x,205+Math.sin((x+worldOffset*.12)/105)*22);ctx.lineTo(900,390);ctx.lineTo(0,390);ctx.fill();
+ctx.fillStyle="#75c879";ctx.beginPath();ctx.moveTo(0,270);for(let x=0;x<=900;x+=30)ctx.lineTo(x,255+Math.sin((x+worldOffset*.35)/90)*17);ctx.lineTo(900,390);ctx.lineTo(0,390);ctx.fill();
+let groundGrad=ctx.createLinearGradient(0,330,0,390);groundGrad.addColorStop(0,"#83d65d");groundGrad.addColorStop(1,"#4b9b42");ctx.fillStyle=groundGrad;ctx.fillRect(0,330,900,60);
+ctx.fillStyle="#397e3d";ctx.fillRect(0,330,900,7);ctx.strokeStyle="#b4e58a";ctx.lineWidth=3;
+for(let x=-(worldOffset%45);x<900;x+=45){ctx.beginPath();ctx.moveTo(x,348);ctx.lineTo(x+18,348);ctx.stroke()}
+for(let o of objects){
+if(o.type==="coin"){ctx.fillStyle="#ffcf32";ctx.beginPath();ctx.arc(o.x,o.y,12,0,Math.PI*2);ctx.fill();ctx.strokeStyle="#b77b08";ctx.lineWidth=3;ctx.stroke();ctx.fillStyle="#fff2a6";ctx.fillRect(o.x-2,o.y-7,4,14)}
+else if(o.type==="cactus"){ctx.fillStyle="#176d36";ctx.fillRect(o.x-10,268,21,62);ctx.fillRect(o.x-22,282,12,8);ctx.fillRect(o.x-22,272,8,18);ctx.fillRect(o.x+10,292,12,8);ctx.fillRect(o.x+14,280,8,20);ctx.fillStyle="#7be18a";ctx.fillRect(o.x-5,273,4,50)}
+else if(o.type==="rock"){ctx.fillStyle="#6e5960";ctx.beginPath();ctx.moveTo(o.x-22,330);ctx.lineTo(o.x-15,302);ctx.lineTo(o.x+4,292);ctx.lineTo(o.x+24,313);ctx.lineTo(o.x+27,330);ctx.fill();ctx.strokeStyle="#3f3b49";ctx.lineWidth=3;ctx.stroke()}
+else if(o.type==="ptero"){ctx.fillStyle="#7541a8";ctx.beginPath();ctx.moveTo(o.x-30,o.y+4);ctx.lineTo(o.x-8,o.y-18+Math.sin(o.phase+performance.now()/100)*7);ctx.lineTo(o.x+2,o.y-2);ctx.lineTo(o.x+25,o.y-22);ctx.lineTo(o.x+17,o.y+10);ctx.lineTo(o.x-4,o.y+4);ctx.lineTo(o.x-24,o.y+18);ctx.fill();ctx.fillStyle="#ffe08a";ctx.fillRect(o.x+8,o.y-3,4,4)}
+}
+if(!(invuln>0&&Math.floor(performance.now()/100)%2===0))drawDinosaur();
+ctx.fillStyle="#183047";ctx.font="bold 17px system-ui";ctx.textAlign="left";ctx.fillText("DINO DASH",18,28);
+if(levelPause>0){ctx.textAlign="center";ctx.font="bold 34px system-ui";ctx.fillText(`LEVEL ${level}!`,450,170)}
+}
+updateStats();showScreen("login");draw();
+</script>
+</body>
+</html>
+
 
 
 
